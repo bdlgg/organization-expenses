@@ -11,6 +11,11 @@ def calculate_total(amount, tax):
 
 
 amount = float(input("Введите сумму расхода: "))
+
+if not check_amount(amount):
+    print("Ошибка: сумма расхода должна быть больше нуля")
+    exit()
+
 category = input("Введите категорию: ")
 
 print("Сумма корректна:", check_amount(amount))
