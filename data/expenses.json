@@ -1,0 +1,23 @@
+[
+    {
+        "id": 1,
+        "amount": 15000,
+        "category": "Оборудование",
+        "department": "IT",
+        "document": "Счет №101"
+    },
+    {
+        "id": 2,
+        "amount": 5000,
+        "category": "Канцелярия",
+        "department": "Бухгалтерия",
+        "document": "Счет №102"
+    },
+    {
+        "id": 3,
+        "amount": 25000,
+        "category": "Оборудование",
+        "department": "Производство",
+        "document": "Счет №103"
+    }
+]
