@@ -3,7 +3,6 @@ from expenses import (
     find_expenses,
     filter_by_category,
     sort_expenses,
-    calculate_total,
     get_statistics
 )
 from storage import load_expenses, save_expenses

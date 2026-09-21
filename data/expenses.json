@@ -19,5 +19,12 @@
         "category": "Оборудование",
         "department": "Производство",
         "document": "Счет №103"
+    },
+    {
+        "id": 4,
+        "amount": 10000.0,
+        "category": "Налог",
+        "department": "IT",
+        "document": "№104"
     }
 ]
