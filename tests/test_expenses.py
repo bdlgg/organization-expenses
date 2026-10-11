@@ -1,9 +1,9 @@
-
 from models import Category, Department, Document, Expense
 from models.expenses import (
     add_expense,
     calculate_average,
     calculate_total,
+    find_expense_by_id,
     find_expenses,
     filter_by_category,
     sort_expenses,
@@ -216,3 +216,19 @@ def test_calculate_average():
 
 def test_calculate_average_empty():
     assert calculate_average([]) == 0.0
+
+
+def test_find_expense_by_id_found():
+    expense = create_test_expense()
+
+    result = find_expense_by_id([expense], expense.id)
+
+    assert result is expense
+
+
+def test_find_expense_by_id_not_found():
+    expense = create_test_expense()
+
+    result = find_expense_by_id([expense], 999)
+
+    assert result is None

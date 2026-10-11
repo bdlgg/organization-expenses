@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .categories import Category
 from .departments import Department
@@ -44,19 +44,16 @@ class Expense:
         documents: List[Document],
     ) -> "Expense":
         """Создать объект Expense из данных JSON."""
-
         category = next(
             category
             for category in categories
             if category.name == data["category"]
         )
-
         department = next(
             department
             for department in departments
             if department.name == data["department"]
         )
-
         document = next(
             document
             for document in documents
@@ -81,13 +78,12 @@ def add_expense(
     document: Document,
 ) -> None:
     """Создать расход и добавить его в коллекцию."""
-
     expense = Expense(
-        expense_id=expense_id,
-        amount=amount,
-        category=category,
-        department=department,
-        document=document,
+        expense_id,
+        amount,
+        category,
+        department,
+        document,
     )
 
     if not expense.is_valid():
@@ -101,7 +97,6 @@ def find_expenses(
     query: str,
 ) -> List[Expense]:
     """Найти расходы по категории, подразделению или документу."""
-
     query = query.lower()
 
     return [
@@ -115,12 +110,22 @@ def find_expenses(
     ]
 
 
+def find_expense_by_id(
+    expenses: List[Expense],
+    expense_id: int,
+) -> Optional[Expense]:
+    """Найти расход по идентификатору."""
+    for expense in expenses:
+        if expense.id == expense_id:
+            return expense
+    return None
+
+
 def filter_by_category(
     expenses: List[Expense],
     category: Category,
 ) -> List[Expense]:
     """Отфильтровать расходы по категории."""
-
     return [
         expense
         for expense in expenses
@@ -132,7 +137,6 @@ def sort_expenses(
     expenses: List[Expense],
 ) -> List[Expense]:
     """Отсортировать расходы по сумме."""
-
     return sorted(expenses, key=lambda expense: expense.amount)
 
 
@@ -143,7 +147,6 @@ def calculate_total(expenses: List[Expense]) -> float:
 
 def calculate_average(expenses: List[Expense]) -> float:
     """Рассчитать среднюю сумму расхода."""
-
     if not expenses:
         return 0.0
 
@@ -152,7 +155,6 @@ def calculate_average(expenses: List[Expense]) -> float:
 
 def get_statistics(expenses: List[Expense]) -> Dict[str, float]:
     """Получить основные статистические показатели."""
-
     return {
         "total": calculate_total(expenses),
         "average": calculate_average(expenses),

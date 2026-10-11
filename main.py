@@ -1,6 +1,6 @@
 from typing import List
 
-from models import Category, Department, Document, Expense
+from models import Expense
 from storage import (
     load_categories,
     load_departments,
