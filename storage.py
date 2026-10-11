@@ -1,139 +1,156 @@
 import json
-from typing import Callable, List, TypeVar
+from pathlib import Path
+from typing import Any, Dict, List
+
+from models import Category, Department, Document, Expense
 
 
-T = TypeVar("T")
+def _load_data(file_path: str) -> List[Dict[str, Any]]:
+    """Загрузить список данных из JSON-файла."""
 
+    path = Path(file_path)
 
-def _load_data(
-    filename: str,
-    from_dict: Callable[[dict], T]
-) -> List[T]:
-    """Загрузить список объектов из JSON."""
-
-    try:
-        with open(filename, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        return [
-            from_dict(item)
-            for item in data
-        ]
-
-    except FileNotFoundError:
+    if not path.exists():
         return []
 
-    except json.JSONDecodeError:
-        return []
+    with path.open("r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 def _save_data(
-    filename: str,
-    items: List[T],
-    to_dict: Callable[[T], dict]
+    file_path: str,
+    data: List[Dict[str, Any]],
 ) -> None:
-    """Сохранить список объектов в JSON."""
+    """Сохранить список данных в JSON-файл."""
 
-    with open(filename, "w", encoding="utf-8") as file:
+    path = Path(file_path)
+
+    with path.open("w", encoding="utf-8") as file:
         json.dump(
-            [to_dict(item) for item in items],
+            data,
             file,
             ensure_ascii=False,
-            indent=4
+            indent=4,
         )
 
 
-def load_expenses(filename: str) -> list:
-    """Загрузить расходы."""
+def load_categories(file_path: str) -> List[Category]:
+    """Загрузить категории из JSON."""
 
-    from expenses import Expense
+    data = _load_data(file_path)
 
-    return _load_data(
-        filename,
-        Expense.from_dict
-    )
-
-
-def save_expenses(
-    filename: str,
-    expenses: list
-) -> None:
-    """Сохранить расходы."""
-
-    _save_data(
-        filename,
-        expenses,
-        lambda expense: expense.to_dict()
-    )
-
-
-def load_categories(filename: str) -> list:
-    """Загрузить категории."""
-
-    from categories import Category
-
-    return _load_data(
-        filename,
-        Category.from_dict
-    )
+    return [
+        Category.from_data(item)
+        for item in data
+    ]
 
 
 def save_categories(
-    filename: str,
-    categories: list
+    file_path: str,
+    categories: List[Category],
 ) -> None:
-    """Сохранить категории."""
+    """Сохранить категории в JSON."""
 
-    _save_data(
-        filename,
-        categories,
-        lambda category: category.to_dict()
-    )
+    data = [
+        {
+            "name": category.name,
+        }
+        for category in categories
+    ]
+
+    _save_data(file_path, data)
 
 
-def load_departments(filename: str) -> list:
-    """Загрузить подразделения."""
+def load_departments(file_path: str) -> List[Department]:
+    """Загрузить подразделения из JSON."""
 
-    from departments import Department
+    data = _load_data(file_path)
 
-    return _load_data(
-        filename,
-        Department.from_dict
-    )
+    return [
+        Department.from_data(item)
+        for item in data
+    ]
 
 
 def save_departments(
-    filename: str,
-    departments: list
+    file_path: str,
+    departments: List[Department],
 ) -> None:
-    """Сохранить подразделения."""
+    """Сохранить подразделения в JSON."""
 
-    _save_data(
-        filename,
-        departments,
-        lambda department: department.to_dict()
-    )
+    data = [
+        {
+            "name": department.name,
+        }
+        for department in departments
+    ]
+
+    _save_data(file_path, data)
 
 
-def load_documents(filename: str) -> list:
-    """Загрузить документы."""
+def load_documents(file_path: str) -> List[Document]:
+    """Загрузить документы из JSON."""
 
-    from documents import Document
+    data = _load_data(file_path)
 
-    return _load_data(
-        filename,
-        Document.from_dict
-    )
+    return [
+        Document.from_data(item)
+        for item in data
+    ]
 
 
 def save_documents(
-    filename: str,
-    documents: list
+    file_path: str,
+    documents: List[Document],
 ) -> None:
-    """Сохранить документы."""
+    """Сохранить документы в JSON."""
 
-    _save_data(
-        filename,
-        documents,
-        lambda document: document.to_dict()
-    )
+    data = [
+        {
+            "number": document.number,
+        }
+        for document in documents
+    ]
+
+    _save_data(file_path, data)
+
+
+def load_expenses(
+    file_path: str,
+    categories: List[Category],
+    departments: List[Department],
+    documents: List[Document],
+) -> List[Expense]:
+    """Загрузить расходы из JSON и создать объекты Expense."""
+
+    data = _load_data(file_path)
+
+    return [
+        Expense.from_data(
+            item,
+            categories,
+            departments,
+            documents,
+        )
+        for item in data
+    ]
+
+
+def save_expenses(
+    file_path: str,
+    expenses: List[Expense],
+) -> None:
+    """Сохранить расходы в JSON."""
+
+    data = [
+        {
+            "id": expense.id,
+            "amount": expense.amount,
+            "category": expense.category.name,
+            "department": expense.department.name,
+            "document": expense.document.number,
+        }
+        for expense in expenses
+    ]
+
+    _save_data(file_path, data)
