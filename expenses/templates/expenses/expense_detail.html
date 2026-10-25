@@ -1,0 +1,37 @@
+{% extends "homepage/base.html" %}
+
+{% block title %}
+    {% if expense %}Расход №{{ expense.id }}{% else %}Расход не найден{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if expense %}
+<section class="page-panel p-4 p-lg-5">
+    <a class="small text-secondary text-decoration-none"
+       href="{% url 'expenses:expense_list' %}">← Все расходы</a>
+    <p class="text-secondary text-uppercase small mt-4 mb-2">Карточка расхода</p>
+    <h1 class="h2 mb-4">Расход №{{ expense.id }}</h1>
+    <div class="stat-value mb-4">{{ expense.amount|floatformat:2 }} ₽</div>
+    <dl class="row mb-4">
+        <dt class="col-sm-4 py-2">Категория</dt>
+        <dd class="col-sm-8 py-2">{{ expense.category_name }}</dd>
+        <dt class="col-sm-4 py-2">Подразделение</dt>
+        <dd class="col-sm-8 py-2">{{ expense.department_name }}</dd>
+        <dt class="col-sm-4 py-2">Подтверждающий документ</dt>
+        <dd class="col-sm-8 py-2">{{ expense.document_number }}</dd>
+    </dl>
+    <a class="btn btn-dark" href="{% url 'expenses:expense_list' %}">
+        Вернуться к расходам
+    </a>
+</section>
+{% else %}
+<section class="page-panel p-4 p-lg-5">
+    <p class="text-secondary text-uppercase small">Ошибка 404</p>
+    <h1 class="h2 mb-3">Расход не найден</h1>
+    <p class="text-secondary">Запись с таким идентификатором отсутствует в базе.</p>
+    <a class="btn btn-dark" href="{% url 'expenses:expense_list' %}">
+        К списку расходов
+    </a>
+</section>
+{% endif %}
+{% endblock %}

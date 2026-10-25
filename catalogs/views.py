@@ -1,74 +1,81 @@
-from pathlib import Path
+"""Представления справочников, данные которых хранятся в SQLite."""
 
-from django.http import HttpResponse
-from django.utils.html import escape
+import sqlite3
+from contextlib import closing
 
-from homepage.views import page
-from storage import load_categories, load_departments, load_documents
+from django.shortcuts import render
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from db.database import get_connection
+
+
+def _open_row_connection() -> sqlite3.Connection:
+    """Открыть соединение SQLite с доступом к полям по именам."""
+    connection = get_connection()
+    connection.row_factory = sqlite3.Row
+    return connection
 
 
 def categories_page(request):
-    """Показать категории расходов."""
-    categories = load_categories(
-        str(BASE_DIR / "data" / "categories.json")
-    )
-    items = "".join(
-        f'<li class="list-group-item">{escape(category.name)}</li>'
-        for category in categories
-    )
-
-    if not items:
-        items = '<li class="list-group-item">Категорий пока нет.</li>'
-
-    content = f"""
-    <h1 class="mb-3">Категории расходов</h1>
-    <ul class="list-group">{items}</ul>
+    """Показать категории, количество и сумму расходов по каждой из них."""
+    query = """
+        SELECT
+            c.id,
+            c.name,
+            COUNT(e.id) AS expense_count,
+            COALESCE(SUM(e.amount), 0) AS total_amount
+        FROM categories AS c
+        LEFT JOIN expenses AS e ON e.category_id = c.id
+        GROUP BY c.id, c.name
+        ORDER BY c.name
     """
-
-    return HttpResponse(page("Категории", content))
+    with closing(_open_row_connection()) as connection:
+        categories = connection.execute(query).fetchall()
+    return render(
+        request,
+        "catalogs/category_list.html",
+        {"categories": categories},
+    )
 
 
 def departments_page(request):
-    """Показать подразделения организации."""
-    departments = load_departments(
-        str(BASE_DIR / "data" / "departments.json")
-    )
-    items = "".join(
-        f'<li class="list-group-item">{escape(department.name)}</li>'
-        for department in departments
-    )
-
-    if not items:
-        items = (
-            '<li class="list-group-item">Подразделений пока нет.</li>'
-        )
-
-    content = f"""
-    <h1 class="mb-3">Подразделения организации</h1>
-    <ul class="list-group">{items}</ul>
+    """Показать подразделения и суммы расходов каждого подразделения."""
+    query = """
+        SELECT
+            d.id,
+            d.name,
+            COUNT(e.id) AS expense_count,
+            COALESCE(SUM(e.amount), 0) AS total_amount
+        FROM departments AS d
+        LEFT JOIN expenses AS e ON e.department_id = d.id
+        GROUP BY d.id, d.name
+        ORDER BY d.name
     """
-
-    return HttpResponse(page("Подразделения", content))
+    with closing(_open_row_connection()) as connection:
+        departments = connection.execute(query).fetchall()
+    return render(
+        request,
+        "catalogs/department_list.html",
+        {"departments": departments},
+    )
 
 
 def documents_page(request):
-    """Показать документы, связанные с расходами."""
-    documents = load_documents(
-        str(BASE_DIR / "data" / "documents.json")
-    )
-    items = "".join(
-        f'<li class="list-group-item">{escape(document.number)}</li>'
-        for document in documents
-    )
-
-    if not items:
-        items = '<li class="list-group-item">Документов пока нет.</li>'
-
-    content = f"""
-    <h1 class="mb-3">Документы</h1>
-    <ul class="list-group">{items}</ul>
+    """Показать документы и расходы, связанные с каждым документом."""
+    query = """
+        SELECT
+            doc.id,
+            doc.number,
+            COUNT(e.id) AS expense_count,
+            COALESCE(SUM(e.amount), 0) AS total_amount
+        FROM documents AS doc
+        LEFT JOIN expenses AS e ON e.document_id = doc.id
+        GROUP BY doc.id, doc.number
+        ORDER BY doc.number
     """
-
-    return HttpResponse(page("Документы", content))
+    with closing(_open_row_connection()) as connection:
+        documents = connection.execute(query).fetchall()
+    return render(
+        request,
+        "catalogs/document_list.html",
+        {"documents": documents},
+    )

@@ -1,0 +1,29 @@
+{% extends "homepage/base.html" %}
+
+{% block title %}Подразделения · Учёт расходов организации{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <p class="text-secondary text-uppercase small mb-2">Справочник</p>
+    <h1 class="h2 mb-1">Подразделения организации</h1>
+    <p class="text-secondary mb-0">Сводка расходов по каждому подразделению.</p>
+</div>
+<section class="page-panel p-3 p-lg-4">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead><tr><th>Подразделение</th><th>Количество расходов</th><th class="text-end">Сумма</th></tr></thead>
+            <tbody>
+                {% for department in departments %}
+                <tr>
+                    <td>{{ department.name }}</td>
+                    <td>{{ department.expense_count }}</td>
+                    <td class="text-end text-nowrap">{{ department.total_amount|floatformat:2 }} ₽</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="text-secondary">Подразделений пока нет.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

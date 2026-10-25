@@ -1,6 +1,10 @@
+"""URL-маршруты справочников организации."""
+
 from django.urls import path
 
 from . import views
+
+app_name = "catalogs"
 
 urlpatterns = [
     path("categories/", views.categories_page, name="categories"),
