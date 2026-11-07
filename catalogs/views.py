@@ -6,6 +6,7 @@ from contextlib import closing
 from django.shortcuts import render
 
 from db.database import get_connection
+from db.queries import SQL_QUERIES
 
 
 def _open_row_connection() -> sqlite3.Connection:
@@ -17,41 +18,31 @@ def _open_row_connection() -> sqlite3.Connection:
 
 def categories_page(request):
     """Показать категории, количество и сумму расходов по каждой из них."""
-    query = """
-        SELECT
-            c.id,
-            c.name,
-            COUNT(e.id) AS expense_count,
-            COALESCE(SUM(e.amount), 0) AS total_amount
-        FROM categories AS c
-        LEFT JOIN expenses AS e ON e.category_id = c.id
-        GROUP BY c.id, c.name
-        ORDER BY c.name
-    """
     with closing(_open_row_connection()) as connection:
-        categories = connection.execute(query).fetchall()
+        categories = connection.execute(
+            SQL_QUERIES[10]
+        ).fetchall()
+        empty_categories = connection.execute(
+            SQL_QUERIES[15]
+        ).fetchall()
+
     return render(
         request,
         "catalogs/category_list.html",
-        {"categories": categories},
+        {
+            "categories": categories,
+            "empty_categories": empty_categories,
+        },
     )
 
 
 def departments_page(request):
     """Показать подразделения и суммы расходов каждого подразделения."""
-    query = """
-        SELECT
-            d.id,
-            d.name,
-            COUNT(e.id) AS expense_count,
-            COALESCE(SUM(e.amount), 0) AS total_amount
-        FROM departments AS d
-        LEFT JOIN expenses AS e ON e.department_id = d.id
-        GROUP BY d.id, d.name
-        ORDER BY d.name
-    """
     with closing(_open_row_connection()) as connection:
-        departments = connection.execute(query).fetchall()
+        departments = connection.execute(
+            SQL_QUERIES[11]
+        ).fetchall()
+
     return render(
         request,
         "catalogs/department_list.html",
@@ -61,19 +52,11 @@ def departments_page(request):
 
 def documents_page(request):
     """Показать документы и расходы, связанные с каждым документом."""
-    query = """
-        SELECT
-            doc.id,
-            doc.number,
-            COUNT(e.id) AS expense_count,
-            COALESCE(SUM(e.amount), 0) AS total_amount
-        FROM documents AS doc
-        LEFT JOIN expenses AS e ON e.document_id = doc.id
-        GROUP BY doc.id, doc.number
-        ORDER BY doc.number
-    """
     with closing(_open_row_connection()) as connection:
-        documents = connection.execute(query).fetchall()
+        documents = connection.execute(
+            SQL_QUERIES[12]
+        ).fetchall()
+
     return render(
         request,
         "catalogs/document_list.html",

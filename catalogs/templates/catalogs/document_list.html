@@ -15,7 +15,7 @@
             <tbody>
                 {% for document in documents %}
                 <tr>
-                    <td>{{ document.number }}</td>
+                    <td>{{ document.document_number }}</td>
                     <td>{{ document.expense_count }}</td>
                     <td class="text-end text-nowrap">{{ document.total_amount|floatformat:2 }} ₽</td>
                 </tr>

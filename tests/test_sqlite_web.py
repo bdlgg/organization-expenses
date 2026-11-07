@@ -86,7 +86,10 @@ def test_statistics_page_displays_aggregates_and_groups():
     assert "Статистика расходов" in content
     assert "Расходы по категориям" in content
     assert "Расходы по подразделениям" in content
+    assert "Категории выше заданного порога" in content
+    assert "Подразделения с расходами не менее заданного порога" in content
     assert "Оборудование" in content
+    assert "Производство" in content
 
 
 def test_catalog_pages_display_data_from_sqlite():
@@ -97,9 +100,16 @@ def test_catalog_pages_display_data_from_sqlite():
         "/documents/",
     )
 
+    expected_text = {
+        "/categories/": "Оборудование",
+        "/departments/": "Бухгалтерия",
+        "/documents/": "Счет №101",
+    }
+
     for path in paths:
         response = client.get(path, HTTP_HOST="localhost")
         assert response.status_code == 200
+        assert expected_text[path] in response.content.decode("utf-8")
 
 
 def test_missing_expense_returns_404():

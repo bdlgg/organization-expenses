@@ -15,7 +15,7 @@
             <tbody>
                 {% for department in departments %}
                 <tr>
-                    <td>{{ department.name }}</td>
+                    <td>{{ department.department_name }}</td>
                     <td>{{ department.expense_count }}</td>
                     <td class="text-end text-nowrap">{{ department.total_amount|floatformat:2 }} ₽</td>
                 </tr>

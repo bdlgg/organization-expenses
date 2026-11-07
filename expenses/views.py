@@ -3,41 +3,11 @@
 import re
 import sqlite3
 from contextlib import closing
-from pathlib import Path
 
 from django.shortcuts import render
 
 from db.database import get_connection
-
-
-# Путь к файлу с SQL-запросами.
-SQL_FILE = Path(__file__).resolve().parents[1] / "sql" / "queries.sql"
-
-
-def _load_sql_queries() -> dict[int, str]:
-    """Загрузить SQL-запросы из файла и сопоставить их с номерами."""
-    content = SQL_FILE.read_text(encoding="utf-8")
-
-    # Разделяем файл по комментариям с номерами запросов: -- 1., -- 2. и т. д.
-    parts = re.split(r"(?m)^--\s*(\d+)\.\s*.*$", content)
-
-    queries = {}
-
-    for index in range(1, len(parts), 2):
-        query_number = int(parts[index])
-        query_content = parts[index + 1].strip()
-
-        # Убираем завершающую точку с запятой.
-        query_content = query_content.rstrip(";").strip()
-
-        if query_content:
-            queries[query_number] = query_content
-
-    return queries
-
-
-# Загружаем SQL-запросы один раз при загрузке представлений.
-SQL_QUERIES = _load_sql_queries()
+from db.queries import SQL_QUERIES
 
 
 def _open_row_connection() -> sqlite3.Connection:
@@ -155,14 +125,13 @@ def expense_list(request):
             parameters,
         ).fetchall()
 
-        # Эти два запроса нужны для списков фильтров.
-        # В текущем queries.sql отдельных запросов для них нет.
+        # Запросы №16 и №17: данные для списков фильтров.
         categories = connection.execute(
-            "SELECT id, name FROM categories ORDER BY name"
+            SQL_QUERIES[16]
         ).fetchall()
 
         departments = connection.execute(
-            "SELECT id, name FROM departments ORDER BY name"
+            SQL_QUERIES[17]
         ).fetchall()
 
     context = {
@@ -230,19 +199,9 @@ def expense_statistics(request):
         if not error:
             error = "Порог должен быть неотрицательным числом."
 
-    # Запрос №13 использует порог 10000.
-    # Заменяем его на параметр ?, чтобы можно было задавать порог со страницы.
-    high_spend_query = re.sub(
-        r"HAVING\s+SUM\s*\(\s*e\.amount\s*\)\s*>\s*10000",
-        "HAVING SUM(e.amount) > ?",
-        SQL_QUERIES[13],
-        count=1,
-        flags=re.IGNORECASE,
-    )
-
     with closing(_open_row_connection()) as connection:
 
-        # Запрос №8: количество, общая и средняя сумма расходов.
+        # Запрос №8: общая статистика расходов.
         summary = connection.execute(
             SQL_QUERIES[8]
         ).fetchone()
@@ -252,7 +211,7 @@ def expense_statistics(request):
             SQL_QUERIES[9]
         ).fetchone()
 
-        # Объединяем результаты двух запросов в один словарь.
+        # Объединяем результаты двух запросов.
         summary = {
             **dict(summary),
             **dict(extremes),
@@ -270,7 +229,13 @@ def expense_statistics(request):
 
         # Запрос №13: категории, превысившие заданный порог.
         high_spend_categories = connection.execute(
-            high_spend_query,
+            SQL_QUERIES[13],
+            (threshold,),
+        ).fetchall()
+
+        # Запрос №14: подразделения с расходами не менее заданного порога.
+        high_spend_departments = connection.execute(
+            SQL_QUERIES[14],
             (threshold,),
         ).fetchall()
 
@@ -279,6 +244,7 @@ def expense_statistics(request):
         "category_statistics": category_statistics,
         "department_statistics": department_statistics,
         "high_spend_categories": high_spend_categories,
+        "high_spend_departments": high_spend_departments,
         "threshold": raw_threshold,
         "error": error,
     }

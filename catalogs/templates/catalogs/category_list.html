@@ -15,7 +15,7 @@
             <tbody>
                 {% for category in categories %}
                 <tr>
-                    <td>{{ category.name }}</td>
+                    <td>{{ category.category_name }}</td>
                     <td>{{ category.expense_count }}</td>
                     <td class="text-end text-nowrap">{{ category.total_amount|floatformat:2 }} ₽</td>
                 </tr>
@@ -25,5 +25,16 @@
             </tbody>
         </table>
     </div>
+</section>
+
+<section class="page-panel p-3 p-lg-4 mt-4">
+    <h2 class="h5 mb-3">Категории без зарегистрированных расходов</h2>
+    <ul class="mb-0">
+        {% for category in empty_categories %}
+        <li>{{ category.name }}</li>
+        {% empty %}
+        <li class="text-secondary">Все категории имеют зарегистрированные расходы.</li>
+        {% endfor %}
+    </ul>
 </section>
 {% endblock %}

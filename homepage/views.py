@@ -6,6 +6,7 @@ from contextlib import closing
 from django.shortcuts import render
 
 from db.database import get_connection
+from db.queries import SQL_QUERIES
 
 
 def _open_row_connection() -> sqlite3.Connection:
@@ -19,13 +20,7 @@ def index(request):
     """Показать краткую сводку расходов из SQLite."""
     with closing(_open_row_connection()) as connection:
         summary = connection.execute(
-            """
-            SELECT
-                COUNT(*) AS expense_count,
-                COALESCE(SUM(amount), 0) AS total_amount,
-                COALESCE(AVG(amount), 0) AS average_amount
-            FROM expenses
-            """
+            SQL_QUERIES[8]
         ).fetchone()
 
     return render(request, "homepage/index.html", {"summary": summary})
