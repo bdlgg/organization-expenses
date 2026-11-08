@@ -8,7 +8,7 @@
         <p class="text-secondary text-uppercase small mb-2">Реестр операций</p>
         <h1 class="h2 mb-1">Расходы организации</h1>
         <p class="text-secondary mb-0">
-            Данные загружаются из SQLite; фильтры обрабатываются SQL-запросом.
+            Данные и фильтры обрабатываются средствами Django ORM.
         </p>
     </div>
     <a class="btn btn-outline-secondary" href="{% url 'expenses:expense_statistics' %}">
@@ -19,11 +19,17 @@
 <section class="page-panel p-3 p-lg-4 mb-4">
     <form method="get" action="{% url 'expenses:expense_list' %}">
         <div class="row g-3 align-items-end">
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-2">
                 <label class="form-label" for="q">Поиск по справочникам</label>
                 <input class="form-control" id="q" name="q" type="search"
                        value="{{ filters.q }}"
-                       placeholder="Категория, отдел или документ">
+                       placeholder="Категория или отдел">
+            </div>
+            <div class="col-md-6 col-lg-2">
+                <label class="form-label" for="document">Номер документа</label>
+                <input class="form-control" id="document" name="document"
+                       type="search" value="{{ filters.document }}"
+                       placeholder="Например, 101">
             </div>
             <div class="col-md-6 col-lg-2">
                 <label class="form-label" for="min_amount">Сумма от, ₽</label>
@@ -55,7 +61,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-6 col-lg-2">
+            <div class="col-md-6 col-lg-1">
                 <label class="form-label" for="sort">Сортировка</label>
                 <select class="form-select" id="sort" name="sort">
                     <option value="amount_desc"
@@ -94,7 +100,7 @@
 <section class="page-panel p-3 p-lg-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="h5 mb-0">Найденные расходы</h2>
-        <span class="badge text-bg-light border">Записей: {{ expenses|length }}</span>
+        <span class="badge text-bg-light border">Записей: {{ expense_count }}</span>
     </div>
     <div class="table-responsive">
         <table class="table align-middle mb-0">
@@ -115,9 +121,9 @@
                             #{{ expense.id }}
                         </a>
                     </td>
-                    <td>{{ expense.category_name }}</td>
-                    <td>{{ expense.department_name }}</td>
-                    <td>{{ expense.document_number }}</td>
+                    <td>{{ expense.category.name }}</td>
+                    <td>{{ expense.department.name }}</td>
+                    <td>{{ expense.document.number }}</td>
                     <td class="text-end text-nowrap fw-semibold">
                         {{ expense.amount|floatformat:2 }} ₽
                     </td>
@@ -133,4 +139,51 @@
         </table>
     </div>
 </section>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="mt-4" aria-label="Навигация по страницам расходов">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{% querystring page=page_obj.previous_page_number %}">
+                Назад
+            </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled">
+            <span class="page-link">Назад</span>
+        </li>
+        {% endif %}
+
+        {% for page_number in page_obj.paginator.page_range %}
+        {% if page_number == page_obj.number %}
+        <li class="page-item active" aria-current="page">
+            <span class="page-link">{{ page_number }}</span>
+        </li>
+        {% else %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{% querystring page=page_number %}">
+                {{ page_number }}
+            </a>
+        </li>
+        {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{% querystring page=page_obj.next_page_number %}">
+                Далее
+            </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled">
+            <span class="page-link">Далее</span>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
 {% endblock %}
