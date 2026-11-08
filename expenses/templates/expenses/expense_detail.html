@@ -14,11 +14,11 @@
     <div class="stat-value mb-4">{{ expense.amount|floatformat:2 }} ₽</div>
     <dl class="row mb-4">
         <dt class="col-sm-4 py-2">Категория</dt>
-        <dd class="col-sm-8 py-2">{{ expense.category_name }}</dd>
+        <dd class="col-sm-8 py-2">{{ expense.category.name }}</dd>
         <dt class="col-sm-4 py-2">Подразделение</dt>
-        <dd class="col-sm-8 py-2">{{ expense.department_name }}</dd>
+        <dd class="col-sm-8 py-2">{{ expense.department.name }}</dd>
         <dt class="col-sm-4 py-2">Подтверждающий документ</dt>
-        <dd class="col-sm-8 py-2">{{ expense.document_number }}</dd>
+        <dd class="col-sm-8 py-2">{{ expense.document.number }}</dd>
     </dl>
     <a class="btn btn-dark" href="{% url 'expenses:expense_list' %}">
         Вернуться к расходам

@@ -1,32 +1,31 @@
 """Представления главной страницы и страницы 404."""
 
-import sqlite3
-from contextlib import closing
+from decimal import Decimal
 
+from django.db.models import Avg, Count, DecimalField, Sum, Value
+from django.db.models.functions import Coalesce
 from django.shortcuts import render
 
-from db.database import get_connection
+from expenses.models import Expense
 
 
-def _open_row_connection() -> sqlite3.Connection:
-    """Открыть SQLite-соединение с доступом к полям строк по именам."""
-    connection = get_connection()
-    connection.row_factory = sqlite3.Row
-    return connection
+MONEY_OUTPUT_FIELD = DecimalField(max_digits=14, decimal_places=2)
+ZERO_AMOUNT = Value(Decimal("0.00"), output_field=MONEY_OUTPUT_FIELD)
 
 
 def index(request):
-    """Показать краткую сводку расходов из SQLite."""
-    with closing(_open_row_connection()) as connection:
-        summary = connection.execute(
-            """
-            SELECT
-                COUNT(*) AS expense_count,
-                COALESCE(SUM(amount), 0) AS total_amount,
-                COALESCE(AVG(amount), 0) AS average_amount
-            FROM expenses
-            """
-        ).fetchone()
+    """Показать краткую сводку расходов, рассчитанную средствами ORM."""
+    summary = Expense.objects.aggregate(
+        expense_count=Count("pk"),
+        total_amount=Coalesce(
+            Sum("amount"), ZERO_AMOUNT,
+            output_field=MONEY_OUTPUT_FIELD,
+        ),
+        average_amount=Coalesce(
+            Avg("amount"), ZERO_AMOUNT,
+            output_field=MONEY_OUTPUT_FIELD,
+        ),
+    )
 
     return render(request, "homepage/index.html", {"summary": summary})
 

@@ -106,7 +106,7 @@ SELECT
 FROM categories AS c
 JOIN expenses AS e ON e.category_id = c.id
 GROUP BY c.id, c.name
-HAVING SUM(e.amount) > 10000
+HAVING SUM(e.amount) > ?
 ORDER BY total_amount DESC;
 
 -- 14. Подразделения с расходами на сумму не менее 10000 рублей (HAVING).
@@ -117,7 +117,7 @@ SELECT
 FROM departments AS d
 JOIN expenses AS e ON e.department_id = d.id
 GROUP BY d.id, d.name
-HAVING SUM(e.amount) >= 10000
+HAVING SUM(e.amount) >= ?
 ORDER BY total_amount DESC;
 
 -- 15. Категории, по которым пока не зарегистрировано расходов.
@@ -126,3 +126,13 @@ FROM categories AS c
 LEFT JOIN expenses AS e ON e.category_id = c.id
 WHERE e.id IS NULL
 ORDER BY c.name;
+
+-- 16. Список категорий для фильтрации расходов.
+SELECT id, name
+FROM categories
+ORDER BY name;
+
+-- 17. Список подразделений для фильтрации расходов.
+SELECT id, name
+FROM departments
+ORDER BY name;

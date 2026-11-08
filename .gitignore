@@ -5,3 +5,7 @@ __pycache__/
 .DS_Store
 .pytest_cache/
 .mypy_cache/
+
+# Django local database (created by migrate).
+db.sqlite3
+db.sqlite3-*
