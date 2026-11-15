@@ -132,15 +132,38 @@ def import_data() -> None:
                         f"Недопустимая сумма расхода {row['id']}"
                     )
 
-                Expense.objects.update_or_create(
-                    pk=row["id"],
-                    defaults={
-                        "amount": amount,
-                        "category_id": row["category_id"],
-                        "department_id": row["department_id"],
-                        "document_id": row["document_id"],
-                    },
-                )
+                expense_fields = {
+                    "amount": amount,
+                    "category_id": row["category_id"],
+                    "department_id": row["department_id"],
+                    "document_id": row["document_id"],
+                }
+                existing_expense = Expense.objects.filter(
+                    pk=row["id"]
+                ).first()
+
+                if existing_expense is None:
+                    # В исходной схеме ПР7 нет даты и статуса. Для новых
+                    # импортируемых строк не подставляем вымышленную дату.
+                    Expense.objects.create(
+                        pk=row["id"],
+                        **expense_fields,
+                        expense_date=None,
+                        status=Expense.Status.PENDING,
+                    )
+                else:
+                    # Повторный импорт обновляет исходные поля, но сохраняет
+                    # введённые позже дату и статус расхода.
+                    for field_name, value in expense_fields.items():
+                        setattr(existing_expense, field_name, value)
+                    existing_expense.save(
+                        update_fields=(
+                            "amount",
+                            "category",
+                            "department",
+                            "document",
+                        )
+                    )
     except Exception:
         # transaction.atomic() автоматически откатывает все операции.
         raise

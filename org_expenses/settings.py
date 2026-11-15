@@ -10,6 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
+from importlib.util import find_spec
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +22,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = (
-    'django-insecure-l_ho12ts$k0b-xhnt-82)610!0%lgek_1)q5m%pgwd6ps2^&5z'
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-local-development-key-change-before-deployment",
 )
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+# Панель отладки включена для локальной разработки и отключается через env.
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in {
+    "1", "true", "yes", "on"
+}
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
@@ -39,9 +44,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    "homepage",
-    "catalogs",
-    "expenses",
+    "homepage.apps.HomepageConfig",
+    "catalogs.apps.CatalogsConfig",
+    "expenses.apps.ExpensesConfig",
 ]
 
 MIDDLEWARE = [
@@ -66,6 +71,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'homepage.context_processors.expense_summary',
             ],
         },
     },
@@ -122,9 +128,6 @@ LANGUAGE_CODE = 'ru-RU'
 
 TIME_ZONE = 'Europe/Moscow'
 USE_I18N = True
-
-USE_I18N = True
-
 USE_TZ = True
 
 
@@ -137,3 +140,13 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Django Debug Toolbar используется только в режиме локальной отладки.
+# Проверка наличия пакета позволяет запускать проект даже до его установки.
+DEBUG_TOOLBAR_AVAILABLE = DEBUG and find_spec("debug_toolbar") is not None
+if DEBUG_TOOLBAR_AVAILABLE:
+    INSTALLED_APPS.append("debug_toolbar")
+    MIDDLEWARE.insert(1, "debug_toolbar.middleware.DebugToolbarMiddleware")
+
+INTERNAL_IPS = ["127.0.0.1"]
