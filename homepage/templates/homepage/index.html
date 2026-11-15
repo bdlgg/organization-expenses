@@ -1,0 +1,72 @@
+{% extends "homepage/base.html" %}
+
+{% block title %}Главная · Учёт расходов организации{% endblock %}
+
+{% block content %}
+<section class="page-panel p-4 p-lg-5 mb-4">
+    <p class="text-secondary text-uppercase small mb-2">
+        Финансовый обзор организации
+    </p>
+    <h1 class="display-6 mb-3">Система учёта расходов организации</h1>
+    <p class="lead text-secondary mb-4">
+        Просматривайте расходы, находите операции по параметрам и анализируйте,
+        на какие категории и подразделения направляются средства.
+    </p>
+    <a class="btn btn-dark me-2 mb-2" href="{% url 'expenses:expense_list' %}">
+        Открыть расходы
+    </a>
+    <a class="btn btn-outline-secondary mb-2"
+       href="{% url 'expenses:expense_statistics' %}">
+        Перейти к статистике
+    </a>
+</section>
+<section class="row g-3 mb-4" aria-label="Сводные показатели">
+    <div class="col-sm-4">
+        <div class="page-panel p-3 h-100">
+            <div class="text-secondary small mb-2">Количество расходов</div>
+            <div class="stat-value">{{ summary.expense_count }}</div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="page-panel p-3 h-100">
+            <div class="text-secondary small mb-2">Общая сумма</div>
+            <div class="stat-value">{{ summary.total_amount|floatformat:2 }} ₽</div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="page-panel p-3 h-100">
+            <div class="text-secondary small mb-2">Средний расход</div>
+            <div class="stat-value">{{ summary.average_amount|floatformat:2 }} ₽</div>
+        </div>
+    </div>
+</section>
+<section class="row g-3">
+    <div class="col-md-4">
+        <a class="page-panel p-3 d-block h-100 text-decoration-none text-reset"
+           href="{% url 'catalogs:categories' %}">
+            <h2 class="h5">Категории</h2>
+            <p class="text-secondary mb-0">
+                Суммы и количество расходов по статьям затрат.
+            </p>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a class="page-panel p-3 d-block h-100 text-decoration-none text-reset"
+           href="{% url 'catalogs:departments' %}">
+            <h2 class="h5">Подразделения</h2>
+            <p class="text-secondary mb-0">
+                Расходы подразделений организации.
+            </p>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a class="page-panel p-3 d-block h-100 text-decoration-none text-reset"
+           href="{% url 'catalogs:documents' %}">
+            <h2 class="h5">Документы</h2>
+            <p class="text-secondary mb-0">
+                Первичные документы, связанные с расходами.
+            </p>
+        </a>
+    </div>
+</section>
+{% endblock %}
