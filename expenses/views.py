@@ -1,45 +1,54 @@
-"""Представления расходов и статистики на основе Django ORM."""
+"""Представления для просмотра, поиска и анализа расходов организации."""
 
-from datetime import date
-from decimal import Decimal, InvalidOperation
+import re
+import sqlite3
+from contextlib import closing
+from pathlib import Path
 
-from django.core.paginator import Paginator
-from django.db.models import (
-    Avg,
-    Count,
-    DecimalField,
-    F,
-    Max,
-    Min,
-    Q,
-    Sum,
-    Value,
-)
-from django.db.models.functions import Coalesce
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import get_object_or_404, redirect, render
-from django.utils.dateparse import parse_date
+from django.shortcuts import render
 
-from catalogs.models import Category, Department
-from .models import Expense
+from db.database import get_connection
 
 
-MONEY_OUTPUT_FIELD = DecimalField(max_digits=14, decimal_places=2)
-ZERO_AMOUNT = Value(Decimal("0.00"), output_field=MONEY_OUTPUT_FIELD)
+# Путь к файлу с SQL-запросами.
+SQL_FILE = Path(__file__).resolve().parents[1] / "sql" / "queries.sql"
 
-SORT_OPTIONS = {
-    "amount_desc": ("-amount", "pk"),
-    "amount_asc": ("amount", "pk"),
-    "category": ("category__name", "pk"),
-    "department": ("department__name", "pk"),
-    "date_desc": ("-expense_date", "-pk"),
-    "date_asc": ("expense_date", "pk"),
-}
-PAGE_SIZE = 10
+
+def _load_sql_queries() -> dict[int, str]:
+    """Загрузить SQL-запросы из файла и сопоставить их с номерами."""
+    content = SQL_FILE.read_text(encoding="utf-8")
+
+    # Разделяем файл по комментариям с номерами запросов: -- 1., -- 2. и т. д.
+    parts = re.split(r"(?m)^--\s*(\d+)\.\s*.*$", content)
+
+    queries = {}
+
+    for index in range(1, len(parts), 2):
+        query_number = int(parts[index])
+        query_content = parts[index + 1].strip()
+
+        # Убираем завершающую точку с запятой.
+        query_content = query_content.rstrip(";").strip()
+
+        if query_content:
+            queries[query_number] = query_content
+
+    return queries
+
+
+# Загружаем SQL-запросы один раз при загрузке представлений.
+SQL_QUERIES = _load_sql_queries()
+
+
+def _open_row_connection() -> sqlite3.Connection:
+    """Открыть соединение, строки которого доступны по именам столбцов."""
+    connection = get_connection()
+    connection.row_factory = sqlite3.Row
+    return connection
 
 
 def _parse_positive_int(value: str) -> int | None:
-    """Преобразовать параметр запроса в положительное целое число."""
+    """Преобразовать параметр URL в положительное целое число."""
     try:
         result = int(value)
     except (TypeError, ValueError):
@@ -48,17 +57,14 @@ def _parse_positive_int(value: str) -> int | None:
     return result if result > 0 else None
 
 
-def _parse_amount(value: str) -> tuple[Decimal | None, str]:
-    """Проверить неотрицательную сумму из параметра запроса."""
+def _parse_amount(value: str) -> tuple[float | None, str]:
+    """Проверить минимальную сумму из формы поиска."""
     if not value:
         return None, ""
 
     try:
-        amount = Decimal(value)
-    except (InvalidOperation, TypeError, ValueError):
-        return None, "Введите корректную сумму."
-
-    if not amount.is_finite():
+        amount = float(value)
+    except ValueError:
         return None, "Введите корректную сумму."
 
     if amount < 0:
@@ -67,139 +73,144 @@ def _parse_amount(value: str) -> tuple[Decimal | None, str]:
     return amount, ""
 
 
-def _parse_date(value: str) -> tuple[date | None, str]:
-    """Проверить дату в формате YYYY-MM-DD из строки запроса."""
-    if not value:
-        return None, ""
+def _split_order_by(query: str) -> tuple[str, str]:
+    """Разделить запрос на основную часть и сортировку."""
+    match = re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE)
 
-    parsed = parse_date(value)
-    if parsed is None:
-        return None, "Введите дату в формате ГГГГ-ММ-ДД."
-    return parsed, ""
+    if match is None:
+        return query.strip(), ""
 
-
-def _combine_errors(*errors: str) -> str:
-    """Объединить сообщения валидации, не дублируя пустые значения."""
-    return " ".join(error for error in errors if error)
+    return (
+        query[:match.start()].strip(),
+        query[match.start():].strip(),
+    )
 
 
-def expense_list(request: HttpRequest) -> HttpResponse:
-    """Показать расходы с ORM-фильтрацией, сортировкой и пагинацией."""
-    raw_min_amount = request.GET.get("min_amount", "").strip()
-    min_amount, amount_error = _parse_amount(raw_min_amount)
+SORT_OPTIONS = {
+    "amount_desc": "e.amount DESC, e.id",
+    "amount_asc": "e.amount ASC, e.id",
+    "category": "c.name, e.id",
+    "department": "d.name, e.id",
+}
 
-    raw_date_from = request.GET.get("date_from", "").strip()
-    raw_date_to = request.GET.get("date_to", "").strip()
-    date_from, date_from_error = _parse_date(raw_date_from)
-    date_to, date_to_error = _parse_date(raw_date_to)
-    if date_from and date_to and date_from > date_to:
-        date_range_error = "Начальная дата не может быть позже конечной."
-    else:
-        date_range_error = ""
+
+def expense_list(request):
+    """Показать расходы с фильтрацией и сортировкой средствами SQL."""
+    min_amount, error = _parse_amount(
+        request.GET.get("min_amount", "").strip()
+    )
 
     category_id = _parse_positive_int(
         request.GET.get("category_id", "")
     )
+
     department_id = _parse_positive_int(
         request.GET.get("department_id", "")
     )
-    search_text = request.GET.get("q", "").strip()
-    document_query = request.GET.get("document", "").strip()
 
-    requested_status = request.GET.get("status", "").strip()
-    valid_statuses = {value for value, _label in Expense.Status.choices}
-    selected_status = (
-        requested_status if requested_status in valid_statuses else ""
-    )
+    search_text = request.GET.get("q", "").strip()
 
     sort_key = request.GET.get("sort", "amount_desc")
-    if sort_key not in SORT_OPTIONS:
-        sort_key = "amount_desc"
-
-    # Загружаем связанные справочники вместе с расходами.
-    expenses = Expense.objects.select_related(
-        "category",
-        "department",
-        "document",
+    sort_sql = SORT_OPTIONS.get(
+        sort_key,
+        SORT_OPTIONS["amount_desc"],
     )
 
+    conditions = []
+    parameters = []
+
     if min_amount is not None:
-        expenses = expenses.above_amount(min_amount)
+        conditions.append("e.amount >= ?")
+        parameters.append(min_amount)
 
     if category_id is not None:
-        expenses = expenses.filter(category_id=category_id)
+        conditions.append("e.category_id = ?")
+        parameters.append(category_id)
 
     if department_id is not None:
-        expenses = expenses.filter(department_id=department_id)
-
-    if selected_status:
-        expenses = expenses.filter(status=selected_status)
-
-    if date_from_error or date_to_error or date_range_error:
-        expenses = expenses.none()
-    else:
-        if date_from:
-            expenses = expenses.filter(expense_date__gte=date_from)
-        if date_to:
-            expenses = expenses.filter(expense_date__lte=date_to)
+        conditions.append("e.department_id = ?")
+        parameters.append(department_id)
 
     if search_text:
-        expenses = expenses.filter(
-            Q(category__name__icontains=search_text)
-            | Q(department__name__icontains=search_text)
-            | Q(document__number__icontains=search_text)
+        conditions.append(
+            "(c.name LIKE ? OR d.name LIKE ? OR doc.number LIKE ?)"
         )
 
-    if document_query:
-        expenses = expenses.filter(
-            document__number__icontains=document_query
+        search_pattern = f"%{search_text}%"
+        parameters.extend(
+            [search_pattern, search_pattern, search_pattern]
         )
 
-    # Сортируем только по заранее разрешённым полям.
-    expenses = expenses.order_by(*SORT_OPTIONS[sort_key])
+    # Используем запрос №1 из queries.sql.
+    query, _ = _split_order_by(SQL_QUERIES[1])
 
-    paginator = Paginator(expenses, PAGE_SIZE)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    query += " ORDER BY " + sort_sql
+
+    with closing(_open_row_connection()) as connection:
+        expenses = connection.execute(
+            query,
+            parameters,
+        ).fetchall()
+
+        # Эти два запроса нужны для списков фильтров.
+        # В текущем queries.sql отдельных запросов для них нет.
+        categories = connection.execute(
+            "SELECT id, name FROM categories ORDER BY name"
+        ).fetchall()
+
+        departments = connection.execute(
+            "SELECT id, name FROM departments ORDER BY name"
+        ).fetchall()
 
     context = {
-        "expenses": page_obj,
-        "page_obj": page_obj,
-        "expense_count": paginator.count,
-        "categories": Category.objects.order_by("name"),
-        "departments": Department.objects.order_by("name"),
-        "status_choices": Expense.Status.choices,
+        "expenses": expenses,
+        "categories": categories,
+        "departments": departments,
         "filters": {
-            "min_amount": raw_min_amount,
+            "min_amount": request.GET.get("min_amount", ""),
             "category_id": category_id,
             "department_id": department_id,
             "q": search_text,
-            "document": document_query,
-            "status": selected_status,
-            "date_from": raw_date_from,
-            "date_to": raw_date_to,
-            "sort": sort_key,
+            "sort": (
+                sort_key
+                if sort_key in SORT_OPTIONS
+                else "amount_desc"
+            ),
         },
-        "error": _combine_errors(
-            amount_error,
-            date_from_error,
-            date_to_error,
-            date_range_error,
-        ),
+        "error": error,
     }
 
-    return render(request, "expenses/expense_list.html", context)
-
-
-def expense_detail(request: HttpRequest, slug: str) -> HttpResponse:
-    """Открыть подробную карточку расхода по уникальному slug."""
-    expense = get_object_or_404(
-        Expense.objects.select_related(
-            "category",
-            "department",
-            "document",
-        ),
-        slug=slug,
+    return render(
+        request,
+        "expenses/expense_list.html",
+        context,
     )
+
+
+def expense_detail(request, expense_id: int):
+    """Получить один расход и связанные с ним справочные данные."""
+
+    # Используем запрос №1 из queries.sql без исходной сортировки.
+    query, _ = _split_order_by(SQL_QUERIES[1])
+    query += " WHERE e.id = ?"
+
+    with closing(_open_row_connection()) as connection:
+        expense = connection.execute(
+            query,
+            (expense_id,),
+        ).fetchone()
+
+    if expense is None:
+        return render(
+            request,
+            "expenses/expense_detail.html",
+            {"expense": None},
+            status=404,
+        )
+
     return render(
         request,
         "expenses/expense_detail.html",
@@ -207,125 +218,73 @@ def expense_detail(request: HttpRequest, slug: str) -> HttpResponse:
     )
 
 
-def expense_detail_legacy(
-    request: HttpRequest,
-    expense_id: int,
-) -> HttpResponse:
-    """Перенаправить старый числовой адрес на канонический адрес по slug."""
-    expense = get_object_or_404(Expense, pk=expense_id)
-    return redirect(expense.get_absolute_url(), permanent=True)
-
-
-def expense_statistics(request: HttpRequest) -> HttpResponse:
-    """Показать сводные показатели и группировки через Django ORM."""
+def expense_statistics(request):
+    """Показать общие показатели и группировку расходов по справочникам."""
     raw_threshold = request.GET.get("threshold", "10000").strip()
+
     threshold, error = _parse_amount(raw_threshold)
 
     if threshold is None:
-        threshold = Decimal("10000.00")
+        threshold = 10000.0
+
         if not error:
             error = "Порог должен быть неотрицательным числом."
 
-    # Отменённые записи остаются в журнале, но не суммируются как расходы.
-    summary = Expense.objects.aggregate(
-        expense_count=Count(
-            "pk",
-            filter=~Q(status=Expense.Status.CANCELLED),
-        ),
-        cancelled_count=Count(
-            "pk",
-            filter=Q(status=Expense.Status.CANCELLED),
-        ),
-        pending_count=Count(
-            "pk",
-            filter=Q(status=Expense.Status.PENDING),
-        ),
-        approved_count=Count(
-            "pk",
-            filter=Q(status=Expense.Status.APPROVED),
-        ),
-        paid_count=Count(
-            "pk",
-            filter=Q(status=Expense.Status.PAID),
-        ),
-        total_amount=Coalesce(
-            Sum(
-                "amount",
-                filter=~Q(status=Expense.Status.CANCELLED),
-            ),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-        average_amount=Coalesce(
-            Avg(
-                "amount",
-                filter=~Q(status=Expense.Status.CANCELLED),
-            ),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-        min_amount=Coalesce(
-            Min(
-                "amount",
-                filter=~Q(status=Expense.Status.CANCELLED),
-            ),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-        max_amount=Coalesce(
-            Max(
-                "amount",
-                filter=~Q(status=Expense.Status.CANCELLED),
-            ),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
+    # Запрос №13 использует порог 10000.
+    # Заменяем его на параметр ?, чтобы можно было задавать порог со страницы.
+    high_spend_query = re.sub(
+        r"HAVING\s+SUM\s*\(\s*e\.amount\s*\)\s*>\s*10000",
+        "HAVING SUM(e.amount) > ?",
+        SQL_QUERIES[13],
+        count=1,
+        flags=re.IGNORECASE,
     )
 
-    active_filter = ~Q(expenses__status=Expense.Status.CANCELLED)
-    category_groups = Category.objects.annotate(
-        category_name=F("name"),
-        expense_count=Count("expenses", filter=active_filter),
-        total_amount=Coalesce(
-            Sum("expenses__amount", filter=active_filter),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-    )
-    category_statistics = category_groups.order_by(
-        "-total_amount", "name"
-    ).values("category_name", "expense_count", "total_amount")
-    high_spend_categories = category_groups.filter(
-        total_amount__gt=threshold
-    ).order_by("-total_amount", "name").values(
-        "category_name", "expense_count", "total_amount"
-    )
+    with closing(_open_row_connection()) as connection:
 
-    department_groups = Department.objects.annotate(
-        department_name=F("name"),
-        expense_count=Count("expenses", filter=active_filter),
-        total_amount=Coalesce(
-            Sum("expenses__amount", filter=active_filter),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-    )
-    department_statistics = department_groups.order_by(
-        "-total_amount", "name"
-    ).values("department_name", "expense_count", "total_amount")
-    high_spend_departments = department_groups.filter(
-        total_amount__gte=threshold
-    ).order_by("-total_amount", "name").values(
-        "department_name", "expense_count", "total_amount"
-    )
+        # Запрос №8: количество, общая и средняя сумма расходов.
+        summary = connection.execute(
+            SQL_QUERIES[8]
+        ).fetchone()
+
+        # Запрос №9: минимальная и максимальная сумма расхода.
+        extremes = connection.execute(
+            SQL_QUERIES[9]
+        ).fetchone()
+
+        # Объединяем результаты двух запросов в один словарь.
+        summary = {
+            **dict(summary),
+            **dict(extremes),
+        }
+
+        # Запрос №10: статистика по категориям.
+        category_statistics = connection.execute(
+            SQL_QUERIES[10]
+        ).fetchall()
+
+        # Запрос №11: статистика по подразделениям.
+        department_statistics = connection.execute(
+            SQL_QUERIES[11]
+        ).fetchall()
+
+        # Запрос №13: категории, превысившие заданный порог.
+        high_spend_categories = connection.execute(
+            high_spend_query,
+            (threshold,),
+        ).fetchall()
 
     context = {
         "summary": summary,
         "category_statistics": category_statistics,
         "department_statistics": department_statistics,
         "high_spend_categories": high_spend_categories,
-        "high_spend_departments": high_spend_departments,
         "threshold": raw_threshold,
         "error": error,
     }
-    return render(request, "expenses/expense_statistics.html", context)
+
+    return render(
+        request,
+        "expenses/expense_statistics.html",
+        context,
+    )

@@ -1,34 +1,33 @@
 """Представления главной страницы и страницы 404."""
 
-from decimal import Decimal
+import sqlite3
+from contextlib import closing
 
-from django.db.models import Avg, Count, DecimalField, Q, Sum, Value
-from django.db.models.functions import Coalesce
 from django.shortcuts import render
 
-from expenses.models import Expense
+from db.database import get_connection
 
 
-MONEY_OUTPUT_FIELD = DecimalField(max_digits=14, decimal_places=2)
-ZERO_AMOUNT = Value(Decimal("0.00"), output_field=MONEY_OUTPUT_FIELD)
+def _open_row_connection() -> sqlite3.Connection:
+    """Открыть SQLite-соединение с доступом к полям строк по именам."""
+    connection = get_connection()
+    connection.row_factory = sqlite3.Row
+    return connection
 
 
 def index(request):
-    """Показать краткую сводку, исключая отменённые расходы из сумм."""
-    actual_filter = ~Q(status=Expense.Status.CANCELLED)
-    summary = Expense.objects.aggregate(
-        expense_count=Count("pk", filter=actual_filter),
-        total_amount=Coalesce(
-            Sum("amount", filter=actual_filter),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-        average_amount=Coalesce(
-            Avg("amount", filter=actual_filter),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-    )
+    """Показать краткую сводку расходов из SQLite."""
+    with closing(_open_row_connection()) as connection:
+        summary = connection.execute(
+            """
+            SELECT
+                COUNT(*) AS expense_count,
+                COALESCE(SUM(amount), 0) AS total_amount,
+                COALESCE(AVG(amount), 0) AS average_amount
+            FROM expenses
+            """
+        ).fetchone()
+
     return render(request, "homepage/index.html", {"summary": summary})
 
 

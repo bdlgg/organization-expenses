@@ -1,64 +1,57 @@
-"""Представления справочников на основе Django ORM."""
+"""Представления справочников, данные которых хранятся в SQLite."""
 
-from decimal import Decimal
+import sqlite3
+from contextlib import closing
 
-from django.db.models import Count, DecimalField, F, Q, Sum, Value
-from django.db.models.functions import Coalesce
 from django.shortcuts import render
 
-from expenses.models import Expense
-from .models import Category, Department, Document
+from db.database import get_connection
 
 
-MONEY_OUTPUT_FIELD = DecimalField(max_digits=14, decimal_places=2)
-ZERO_AMOUNT = Value(Decimal("0.00"), output_field=MONEY_OUTPUT_FIELD)
-ACTIVE_EXPENSES = ~Q(expenses__status=Expense.Status.CANCELLED)
+def _open_row_connection() -> sqlite3.Connection:
+    """Открыть соединение SQLite с доступом к полям по именам."""
+    connection = get_connection()
+    connection.row_factory = sqlite3.Row
+    return connection
 
 
 def categories_page(request):
-    """Показать категории, количество и сумму неотменённых расходов."""
-    categories = Category.objects.annotate(
-        category_name=F("name"),
-        expense_count=Count("expenses", filter=ACTIVE_EXPENSES),
-        total_amount=Coalesce(
-            Sum("expenses__amount", filter=ACTIVE_EXPENSES),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-    ).order_by("-total_amount", "name").values(
-        "category_name", "expense_count", "total_amount"
-    )
-
-    # Категория с отменённым расходом всё равно не считается пустой:
-    # связь и история операции сохраняются.
-    empty_categories = Category.objects.exclude(
-        pk__in=Expense.objects.values("category_id")
-    ).order_by("name")
-
+    """Показать категории, количество и сумму расходов по каждой из них."""
+    query = """
+        SELECT
+            c.id,
+            c.name,
+            COUNT(e.id) AS expense_count,
+            COALESCE(SUM(e.amount), 0) AS total_amount
+        FROM categories AS c
+        LEFT JOIN expenses AS e ON e.category_id = c.id
+        GROUP BY c.id, c.name
+        ORDER BY c.name
+    """
+    with closing(_open_row_connection()) as connection:
+        categories = connection.execute(query).fetchall()
     return render(
         request,
         "catalogs/category_list.html",
-        {
-            "categories": categories,
-            "empty_categories": empty_categories,
-        },
+        {"categories": categories},
     )
 
 
 def departments_page(request):
-    """Показать подразделения и суммы неотменённых расходов."""
-    departments = Department.objects.annotate(
-        department_name=F("name"),
-        expense_count=Count("expenses", filter=ACTIVE_EXPENSES),
-        total_amount=Coalesce(
-            Sum("expenses__amount", filter=ACTIVE_EXPENSES),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-    ).order_by("-total_amount", "name").values(
-        "department_name", "expense_count", "total_amount"
-    )
-
+    """Показать подразделения и суммы расходов каждого подразделения."""
+    query = """
+        SELECT
+            d.id,
+            d.name,
+            COUNT(e.id) AS expense_count,
+            COALESCE(SUM(e.amount), 0) AS total_amount
+        FROM departments AS d
+        LEFT JOIN expenses AS e ON e.department_id = d.id
+        GROUP BY d.id, d.name
+        ORDER BY d.name
+    """
+    with closing(_open_row_connection()) as connection:
+        departments = connection.execute(query).fetchall()
     return render(
         request,
         "catalogs/department_list.html",
@@ -67,19 +60,20 @@ def departments_page(request):
 
 
 def documents_page(request):
-    """Показать документы и связанные с ними неотменённые расходы."""
-    documents = Document.objects.annotate(
-        document_number=F("number"),
-        expense_count=Count("expenses", filter=ACTIVE_EXPENSES),
-        total_amount=Coalesce(
-            Sum("expenses__amount", filter=ACTIVE_EXPENSES),
-            ZERO_AMOUNT,
-            output_field=MONEY_OUTPUT_FIELD,
-        ),
-    ).order_by("-total_amount", "number").values(
-        "document_number", "expense_count", "total_amount"
-    )
-
+    """Показать документы и расходы, связанные с каждым документом."""
+    query = """
+        SELECT
+            doc.id,
+            doc.number,
+            COUNT(e.id) AS expense_count,
+            COALESCE(SUM(e.amount), 0) AS total_amount
+        FROM documents AS doc
+        LEFT JOIN expenses AS e ON e.document_id = doc.id
+        GROUP BY doc.id, doc.number
+        ORDER BY doc.number
+    """
+    with closing(_open_row_connection()) as connection:
+        documents = connection.execute(query).fetchall()
     return render(
         request,
         "catalogs/document_list.html",
