@@ -43,12 +43,36 @@ class Expense(models.Model):
         blank=True,
         default="Без комментария",
     )
+    receipt_image = models.ImageField(
+        upload_to="receipts/",
+        blank=True,
+        null=True,
+        verbose_name="Скан подтверждающего документа",
+    )
     slug = models.SlugField(
         max_length=160,
         unique=True,
         null=True,
         blank=True,
         verbose_name="Адрес расхода",
+    )
+    STATUS_PENDING = "PENDING"
+    STATUS_APPROVED = "APPROVED"
+    STATUS_PAID = "PAID"
+    STATUS_CANCELLED = "CANCELLED"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Ожидает обработки"),
+        (STATUS_APPROVED, "Одобрен"),
+        (STATUS_PAID, "Оплачен"),
+        (STATUS_CANCELLED, "Отменён"),
+    ]
+
+    status = models.CharField(
+        max_length=12,
+        choices=STATUS_CHOICES,
+        default="PENDING",
+        verbose_name="Статус расхода",
     )
 
     class Meta:

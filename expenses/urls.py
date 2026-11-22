@@ -9,7 +9,14 @@ app_name = "expenses"
 urlpatterns = [
     path("", views.expense_list, name="expense_list"),
     path("statistics/", views.expense_statistics, name="expense_statistics"),
+    path("new/", views.expense_create, name="expense_create"),
     # Сохраняем прежние числовые адреса и перенаправляем их на slug.
+    path("<slug:slug>/edit/", views.expense_update, name="expense_update"),
+    path(
+        "<slug:slug>/status/",
+        views.expense_change_status,
+        name="expense_change_status",
+    ),
     path(
         "<int:expense_id>/",
         views.expense_detail_legacy,

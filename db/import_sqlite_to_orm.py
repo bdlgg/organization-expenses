@@ -132,11 +132,15 @@ def import_data() -> None:
                         f"Недопустимая сумма расхода {row['id']}"
                     )
 
-                    "amount": amount,
-                    "category_id": row["category_id"],
-                    "department_id": row["department_id"],
-                    "document_id": row["document_id"],
-                    )
+                Expense.objects.update_or_create(
+                    pk=row["id"],
+                    defaults={
+                        "amount": amount,
+                        "category_id": row["category_id"],
+                        "department_id": row["department_id"],
+                        "document_id": row["document_id"],
+                    },
+                )
     except Exception:
         # transaction.atomic() автоматически откатывает все операции.
         raise

@@ -1,4 +1,4 @@
-"""Регистрация расходов в административной панели Django."""
+"""Регистрация расходов организации в административной панели."""
 
 from django.contrib import admin
 
@@ -13,12 +13,14 @@ class ExpenseAdmin(admin.ModelAdmin):
         "category",
         "department",
         "document",
+        "status",
     )
-    list_filter = ("category", "department", "document")
+    list_filter = ("status", "category", "department", "document")
     search_fields = (
         "category__name",
         "department__name",
         "document__number",
+        "comment",
     )
     list_select_related = ("category", "department", "document")
     ordering = ("-amount", "id")

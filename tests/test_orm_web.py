@@ -1,4 +1,4 @@
-"""Проверки пользовательских страниц и операций Django ORM в ПР9."""
+"""Проверки пользовательских страниц и операций Django ORM в ПР11."""
 
 from decimal import Decimal
 from pathlib import Path
@@ -159,7 +159,7 @@ def test_expense_sorting_uses_allowed_fields(sample_data):
     expenses = list(response.context["expenses"].object_list)
     assert expenses[0].amount == Decimal("400.00")
 
-    # Неизвестный ключ сортировки заменяется безопасным значением по умолчанию.
+    # Неизвестная сортировка заменяется безопасным значением по умолчанию.
     invalid_response = Client().get(
         "/expenses/?sort=some_unapproved_field",
         HTTP_HOST="localhost",
@@ -192,6 +192,10 @@ def test_expense_pagination_keeps_filters_and_sort(sample_data):
 
 def test_expense_detail_uses_related_models_and_404(sample_data):
     client = Client()
+    response = client.get(
+        sample_data["first"].get_absolute_url(),
+        HTTP_HOST="localhost",
+    )
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
@@ -302,3 +306,221 @@ def test_old_sqlite_calls_are_not_used_in_django_views():
         assert "sqlite3" not in source
         assert ".execute(" not in source
         assert "get_connection" not in source
+
+
+def test_expense_create_form_saves_only_validated_data(sample_data):
+    client = Client()
+    payload = {
+        "amount": "1234.56",
+        "category": sample_data["equipment"].pk,
+        "department": sample_data["it"].pk,
+        "document": sample_data["first"].document_id,
+        "comment": "Покупка монитора",
+    }
+
+    response = client.post("/expenses/new/", payload, HTTP_HOST="localhost")
+
+    assert response.status_code == 302
+    created = Expense.objects.get(amount=Decimal("1234.56"))
+    assert created.comment == "Покупка монитора"
+    assert created.status == Expense.STATUS_PENDING
+    assert created.slug
+
+
+def test_expense_create_form_shows_validation_error_without_saving(
+    sample_data,
+):
+    before_count = Expense.objects.count()
+    response = Client().post(
+        "/expenses/new/",
+        {
+            "amount": "-10.00",
+            "category": sample_data["equipment"].pk,
+            "department": sample_data["it"].pk,
+            "document": sample_data["first"].document_id,
+            "comment": "Некорректная сумма",
+        },
+        HTTP_HOST="localhost",
+    )
+
+    assert response.status_code == 200
+    assert (
+        "Сумма расхода должна быть больше нуля."
+        in response.content.decode("utf-8")
+    )
+    assert Expense.objects.count() == before_count
+
+
+def test_expense_update_form_uses_instance_and_preserves_status(sample_data):
+    expense = sample_data["first"]
+    expense.status = Expense.STATUS_APPROVED
+    expense.save(update_fields=["status"])
+
+    client = Client()
+    page = client.get(
+        f"/expenses/{expense.slug}/edit/",
+        HTTP_HOST="localhost",
+    )
+    assert page.status_code == 200
+    assert "Редактирование расхода" in page.content.decode("utf-8")
+
+    response = client.post(
+        f"/expenses/{expense.slug}/edit/",
+        {
+            "amount": "16000.00",
+            "category": expense.category_id,
+            "department": expense.department_id,
+            "document": expense.document_id,
+            "comment": "Изменённый комментарий",
+        },
+        HTTP_HOST="localhost",
+    )
+
+    assert response.status_code == 302
+    expense.refresh_from_db()
+    assert expense.amount == Decimal("16000.00")
+    assert expense.comment == "Изменённый комментарий"
+    assert expense.status == Expense.STATUS_APPROVED
+
+
+def test_edit_missing_expense_returns_404():
+    response = Client().get(
+        "/expenses/absent-expense/edit/",
+        HTTP_HOST="localhost",
+    )
+    assert response.status_code == 404
+
+
+def test_status_changes_only_with_post_and_valid_transition(sample_data):
+    expense = sample_data["first"]
+    client = Client()
+    status_url = f"/expenses/{expense.slug}/status/"
+
+    get_response = client.get(status_url, HTTP_HOST="localhost")
+    assert get_response.status_code == 405
+
+    post_response = client.post(
+        status_url,
+        {"status": Expense.STATUS_CANCELLED},
+        HTTP_HOST="localhost",
+    )
+    assert post_response.status_code == 302
+    expense.refresh_from_db()
+    assert expense.status == Expense.STATUS_CANCELLED
+
+    invalid_response = client.post(
+        status_url,
+        {"status": Expense.STATUS_PAID},
+        HTTP_HOST="localhost",
+    )
+    assert invalid_response.status_code == 400
+    expense.refresh_from_db()
+    assert expense.status == Expense.STATUS_CANCELLED
+
+
+def test_status_form_requires_csrf_token(sample_data):
+    expense = sample_data["first"]
+    client = Client(enforce_csrf_checks=True)
+    detail = client.get(
+        expense.get_absolute_url(),
+        HTTP_HOST="localhost",
+    )
+    assert detail.status_code == 200
+    assert b"csrfmiddlewaretoken" in detail.content
+
+    response = client.post(
+        f"/expenses/{expense.slug}/status/",
+        {"status": Expense.STATUS_CANCELLED},
+        HTTP_HOST="localhost",
+    )
+    assert response.status_code == 403
+
+
+def test_expense_create_uploads_and_displays_receipt_image(
+    sample_data, tmp_path,
+):
+    from io import BytesIO
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from django.test import override_settings
+    from PIL import Image
+
+    image_buffer = BytesIO()
+    Image.new("RGB", (3, 3), color="white").save(image_buffer, format="PNG")
+    upload = SimpleUploadedFile(
+        "receipt.png",
+        image_buffer.getvalue(),
+        content_type="image/png",
+    )
+
+    with override_settings(MEDIA_ROOT=tmp_path):
+        response = Client().post(
+            "/expenses/new/",
+            {
+                "amount": "999.99",
+                "category": sample_data["equipment"].pk,
+                "department": sample_data["it"].pk,
+                "document": sample_data["first"].document_id,
+                "comment": "Оплата по счёту",
+                "receipt_image": upload,
+            },
+            HTTP_HOST="localhost",
+        )
+
+        assert response.status_code == 302
+        created = Expense.objects.get(amount=Decimal("999.99"))
+        assert created.receipt_image.name.startswith("receipts/")
+        assert created.receipt_image.storage.exists(created.receipt_image.name)
+
+        detail = Client().get(
+            created.get_absolute_url(),
+            HTTP_HOST="localhost",
+        )
+        assert detail.status_code == 200
+        assert "Подтверждающий документ" in detail.content.decode("utf-8")
+
+
+def test_expense_filter_form_handles_invalid_get_values(sample_data):
+    response = Client().get(
+        "/expenses/?min_amount=not-a-number&category_id=bad&sort=unknown",
+        HTTP_HOST="localhost",
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Введите корректную сумму." in content
+    assert response.context["filters"]["sort"] == "amount_desc"
+
+
+def test_expense_rejects_unsupported_receipt_image_format(sample_data):
+    from io import BytesIO
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    image_buffer = BytesIO()
+    Image.new("RGB", (3, 3), color="white").save(image_buffer, format="GIF")
+    upload = SimpleUploadedFile(
+        "receipt.gif",
+        image_buffer.getvalue(),
+        content_type="image/gif",
+    )
+    before_count = Expense.objects.count()
+
+    response = Client().post(
+        "/expenses/new/",
+        {
+            "amount": "100.00",
+            "category": sample_data["equipment"].pk,
+            "department": sample_data["it"].pk,
+            "document": sample_data["first"].document_id,
+            "receipt_image": upload,
+        },
+        HTTP_HOST="localhost",
+    )
+
+    assert response.status_code == 200
+    assert "Разрешены только изображения JPG, PNG и WebP." in (
+        response.content.decode("utf-8")
+    )
+    assert Expense.objects.count() == before_count

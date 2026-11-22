@@ -1,33 +1,69 @@
 {% extends "homepage/base.html" %}
 
-{% block title %}Расход №{{ expense.id }} · {{ site_name }}{% endblock %}
+{% block title %}Расход №{{ expense.pk }} · {{ site_name }}{% endblock %}
 
 {% block content %}
 <section class="page-panel p-4 p-lg-5">
     <a class="small text-secondary text-decoration-none"
        href="{% url 'expenses:expense_list' %}">← Все расходы</a>
-    <p class="text-secondary text-uppercase small mt-4 mb-2">Карточка расхода</p>
-    <h1 class="h2 mb-2">Расход №{{ expense.id }}</h1>
-    <p class="text-secondary mb-4">Адрес записи: <code>{{ expense.slug }}</code></p>
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mt-4 mb-4">
+        <div>
+            <p class="text-secondary text-uppercase small mb-2">Карточка расхода</p>
+            <h1 class="h2 mb-1">Расход №{{ expense.pk }}</h1>
+            <p class="text-secondary mb-0">Адрес записи: <code>{{ expense.slug }}</code></p>
+        </div>
+        <a class="btn btn-outline-dark"
+           href="{% url 'expenses:expense_update' slug=expense.slug %}">
+            Редактировать
+        </a>
+    </div>
+
     <div class="stat-value mb-4">{{ expense.amount|floatformat:2 }} ₽</div>
     <dl class="row mb-4">
-        <dt class="col-sm-4 py-2">Дата расхода</dt>
-        <dd class="col-sm-8 py-2">
-            {% if expense.expense_date %}{{ expense.expense_date|date:"d.m.Y" }}{% else %}Не указана в исходных данных{% endif %}
-        </dd>
         <dt class="col-sm-4 py-2">Статус</dt>
         <dd class="col-sm-8 py-2">{{ expense.get_status_display }}</dd>
-        <dt class="col-sm-4 py-2">Крупный расход</dt>
-        <dd class="col-sm-8 py-2">{% if expense.is_large %}Да{% else %}Нет{% endif %}</dd>
         <dt class="col-sm-4 py-2">Категория</dt>
         <dd class="col-sm-8 py-2">{{ expense.category.name }}</dd>
         <dt class="col-sm-4 py-2">Подразделение</dt>
         <dd class="col-sm-8 py-2">{{ expense.department.name }}</dd>
         <dt class="col-sm-4 py-2">Подтверждающий документ</dt>
         <dd class="col-sm-8 py-2">{{ expense.document.number }}</dd>
+        <dt class="col-sm-4 py-2">Комментарий</dt>
+        <dd class="col-sm-8 py-2">{{ expense.comment|default:"Не указан"|linebreaksbr }}</dd>
     </dl>
-    <a class="btn btn-dark" href="{% url 'expenses:expense_list' %}">
-        Вернуться к расходам
-    </a>
+
+    <div class="mb-4">
+        <h2 class="h5">Изображение подтверждающего документа</h2>
+        {% if expense.receipt_image %}
+            <a href="{{ expense.receipt_image.url }}" target="_blank" rel="noopener">
+                <img src="{{ expense.receipt_image.url }}"
+                     alt="Подтверждающий документ к расходу №{{ expense.pk }}"
+                     class="img-fluid border" style="max-height: 360px">
+            </a>
+        {% else %}
+            <p class="text-secondary mb-0">Изображение документа не загружено.</p>
+        {% endif %}
+    </div>
+
+    {% if status_form.status.field.choices %}
+    <div class="border-top pt-4">
+        <h2 class="h5 mb-3">Изменение статуса</h2>
+        <form method="post" action="{% url 'expenses:expense_change_status' slug=expense.slug %}"
+              class="row g-2 align-items-end">
+            {% csrf_token %}
+            <div class="col-md-5">
+                {{ status_form.status.label_tag }}
+                {{ status_form.status }}
+                {{ status_form.status.errors }}
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-dark" type="submit">Сохранить статус</button>
+            </div>
+        </form>
+        <p class="form-text mt-2 mb-0">
+            Статус можно перевести на следующий этап обработки или отменить расход.
+        </p>
+    </div>
+    {% endif %}
 </section>
 {% endblock %}

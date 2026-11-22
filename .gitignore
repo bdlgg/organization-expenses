@@ -9,3 +9,9 @@ __pycache__/
 # Django local database (created by migrate).
 db.sqlite3
 db.sqlite3-*
+
+# Загруженные пользователями изображения подтверждающих документов.
+/media/
+
+# Локальная резервная копия исходной истории Git.
+/.git_pr10_backup_*/
